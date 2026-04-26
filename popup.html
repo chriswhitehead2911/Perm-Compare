@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SF Permission Set Comparator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <span class="header-title">SF Permission Comparator</span>
+  </div>
+
+  <div id="app">
+
+    <!-- Connected Orgs -->
+    <section class="section">
+      <div class="section-title">Connected Orgs</div>
+      <div id="orgsList"></div>
+
+      <!-- Scan button -->
+      <button class="btn btn-scan" id="scanBtn">
+        <span class="scan-icon">⟳</span> Scan Open Salesforce Tabs
+      </button>
+
+      <!-- Manual URL entry (collapsed by default) -->
+      <div id="manualRow">
+        <button class="link-btn" id="manualToggle">+ Add by URL</button>
+        <div id="manualInput" style="display:none;">
+          <input type="text" id="orgUrlInput" placeholder="e.g. mycompany.my.salesforce.com">
+          <button class="btn btn-add" id="addByUrlBtn">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Permission Set Selection (shown when 2+ orgs) -->
+    <section class="section" id="psSection" style="display:none;">
+      <div class="section-title">Select Permission Sets</div>
+      <p class="hint">Choose one permission set per org.</p>
+      <div id="psSelectors"></div>
+      <button class="btn btn-primary" id="compareBtn" disabled>Run Comparison</button>
+    </section>
+
+    <div id="statusMsg" class="status-msg" style="display:none;"></div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

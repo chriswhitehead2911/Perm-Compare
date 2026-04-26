@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Salesforce Permission Set Comparator",
+  "version": "1.1.0",
+  "description": "Compare permission sets across multiple Salesforce orgs",
+  "permissions": ["storage", "cookies", "tabs"],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.cloudforce.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SF Permission Set Comparator"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

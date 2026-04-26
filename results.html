@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Permission Set Comparison</title>
+  <link rel="stylesheet" href="results.css">
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-title">
+      <span class="logo">SF</span>
+      <div>
+        <h1>Permission Set Comparison</h1>
+        <div id="comparisonSubtitle" class="subtitle"></div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <label class="toggle-label">
+        <input type="checkbox" id="diffsOnlyToggle">
+        Differences only
+      </label>
+      <button class="btn-export" id="exportCsvBtn">Export CSV</button>
+      <button class="btn-export" id="exportHtmlBtn">Export HTML</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="tab-btn active" data-section="summary">Summary</button>
+    <button class="tab-btn" data-section="systemPermissions">System Permissions</button>
+    <button class="tab-btn" data-section="objectPermissions">Object Permissions</button>
+    <button class="tab-btn" data-section="fieldPermissions">Field Permissions</button>
+    <button class="tab-btn" data-section="tabSettings">Tab Settings</button>
+    <button class="tab-btn" data-section="apexClassAccess">Apex Classes</button>
+    <button class="tab-btn" data-section="vfPageAccess">VF Pages</button>
+    <button class="tab-btn" data-section="flowAccess">Flows</button>
+    <button class="tab-btn" data-section="appAccess">Apps</button>
+    <button class="tab-btn" data-section="customPermissions">Custom Permissions</button>
+    <button class="tab-btn" data-section="recordTypeAccess">Record Types</button>
+    <button class="tab-btn" data-section="namedCredentialAccess">Named Credentials</button>
+    <button class="tab-btn" data-section="externalDataSourceAccess">Ext. Data Sources</button>
+    <button class="tab-btn" data-section="loginHours">Login Hours</button>
+    <button class="tab-btn" data-section="loginIpRanges">Login IP Ranges</button>
+  </div>
+
+  <div class="filter-bar">
+    <input type="search" id="filterInput" placeholder="Filter by name…">
+    <span id="rowCount" class="row-count"></span>
+  </div>
+
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      Loading comparison data…
+    </div>
+  </div>
+
+  <script src="results.js" type="module"></script>
+</body>
+</html>
