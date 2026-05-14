@@ -164,6 +164,7 @@ async function getPermissionSets(orgId) {
 }
 
 async function fetchPermissionSetData(orgId, id, itemType = 'permissionset') {
+  assertSalesforceId(id);
   const { org, api } = await getOrgAndSession(orgId);
 
   if (itemType === 'permissionsetgroup') {
@@ -504,7 +505,7 @@ async function fetchSetupEntityAccess(api, permissionSetId) {
 async function resolveNames(api, sobject, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT Name FROM ${sobject} WHERE Id IN (${idList})`);
@@ -517,7 +518,7 @@ async function resolveNames(api, sobject, ids) {
 async function resolveCustomPermissions(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT DeveloperName FROM CustomPermission WHERE Id IN (${idList})`);
@@ -530,7 +531,7 @@ async function resolveCustomPermissions(api, ids) {
 async function resolveRecordTypes(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT SobjectType, DeveloperName FROM RecordType WHERE Id IN (${idList})`);
@@ -543,7 +544,7 @@ async function resolveRecordTypes(api, ids) {
 async function resolveFlows(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       // FlowDefinition is a Tooling API object — fall back to IDs if unavailable
@@ -557,7 +558,7 @@ async function resolveFlows(api, ids) {
 async function resolveApps(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT Id, Label FROM AppMenuItem WHERE Id IN (${idList})`);
@@ -570,7 +571,7 @@ async function resolveApps(api, ids) {
 async function resolveNamedCredentials(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT Id, MasterLabel FROM NamedCredential WHERE Id IN (${idList})`);
@@ -583,7 +584,7 @@ async function resolveNamedCredentials(api, ids) {
 async function resolveExternalDataSources(api, ids) {
   if (!ids.length) return [];
   const names = [];
-  for (const chunk of chunkArray(ids, 200)) {
+  for (const chunk of chunkArray(ids.filter(id => /^[a-zA-Z0-9]{15,18}$/.test(id)), 200)) {
     const idList = chunk.map(id => `'${id}'`).join(',');
     try {
       const r = await api.queryAll(`SELECT Id, MasterLabel FROM ExternalDataSource WHERE Id IN (${idList})`);
@@ -676,6 +677,13 @@ function normalizeToInstanceUrl(url) {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function assertSalesforceId(id) {
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9]{15,18}$/.test(id)) {
+    throw new Error(`Invalid Salesforce ID: ${String(id).slice(0, 30)}`);
+  }
+  return id;
+}
 
 function chunkArray(arr, size) {
   const out = [];

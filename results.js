@@ -32,6 +32,7 @@ async function init() {
   try {
     const data = await chrome.storage.local.get('comparisonData');
     datasets = data.comparisonData;
+    await chrome.storage.local.remove('comparisonData');
     if (!datasets || datasets.length < 2) {
       showError('No comparison data found. Please run a comparison from the extension popup.');
       return;
@@ -463,7 +464,9 @@ function downloadFile(content, filename, mimeType) {
 }
 
 function escHtml(str = '') {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 init();

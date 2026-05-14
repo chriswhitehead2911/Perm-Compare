@@ -13,6 +13,9 @@
     "default_popup": "popup.html",
     "default_title": "SF Permission Set Comparator"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "background": {
     "service_worker": "background.js",
     "type": "module"

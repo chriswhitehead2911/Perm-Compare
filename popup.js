@@ -61,7 +61,7 @@ function renderOrgs() {
           <div class="org-name">${escHtml(org.name)}</div>
           <div class="org-url">${escHtml(org.instanceUrl)}</div>
         </div>
-        <button class="disconnect-btn" data-orgid="${org.id}">Remove</button>
+        <button class="disconnect-btn" data-orgid="${escHtml(org.id)}">Remove</button>
       </div>`).join('');
 
     list.querySelectorAll('.disconnect-btn').forEach(btn =>
@@ -230,7 +230,7 @@ function renderPSSelectors(loading = false) {
     return `
       <div class="ps-selector">
         <label>${escHtml(org.name)}</label>
-        <select data-orgid="${org.id}" ${isEmpty ? 'disabled' : ''}>
+        <select data-orgid="${escHtml(org.id)}" ${isEmpty ? 'disabled' : ''}>
           <option value="">— Select profile, permission set, or group —</option>
           ${groups}
         </select>
@@ -290,5 +290,7 @@ function hideStatus() {
 }
 
 function escHtml(str = '') {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
