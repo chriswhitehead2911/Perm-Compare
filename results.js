@@ -5,7 +5,7 @@ import { comparePermissionSets } from './comparison.js';
 let comparison = null;
 let datasets = null;
 let activeSection = 'summary';
-let diffsOnly = false;
+let diffsOnly = true;
 let filterText = '';
 
 // All navigable sections in order (summary handled separately)
@@ -48,7 +48,7 @@ async function init() {
 function renderSubtitle(ds) {
   document.getElementById('comparisonSubtitle').textContent =
     ds.map(d => {
-      const kind = d.itemType === 'profile' ? 'Profile' : 'Perm Set';
+      const kind = d.itemType === 'profile' ? 'Profile' : d.itemType === 'permissionsetgroup' ? 'PSG' : 'Perm Set';
       return `${d.orgName} › ${kind}: ${d.permissionSetLabel || d.permissionSetName}`;
     }).join('  vs  ');
 }
@@ -124,7 +124,7 @@ function renderSection() {
 
 function makeHeaderCols(headers) {
   return headers.map(h => {
-    const kind = h.itemType === 'profile' ? 'Profile' : 'Perm Set';
+    const kind = h.itemType === 'profile' ? 'Profile' : h.itemType === 'permissionsetgroup' ? 'PSG' : 'Perm Set';
     return `<th>${escHtml(h.orgName)}<br><small>${kind}: ${escHtml(h.permissionSetLabel)}</small></th>`;
   }).join('');
 }

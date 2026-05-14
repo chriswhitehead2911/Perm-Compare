@@ -43,7 +43,7 @@ async function getSession(instanceUrl) {
   if (!cookie?.value) {
     const host = new URL(instanceUrl).hostname;
     throw new Error(
-      `Not logged in to ${host}. Please open that org in Chrome and log in, then try again.`
+      `No active session found for ${host}. Please reload that Salesforce tab and log in, then try again.`
     );
   }
   return cookie.value;
@@ -134,11 +134,13 @@ async function getOrgAndSession(orgId) {
 async function getPermissionSets(orgId) {
   const { api } = await getOrgAndSession(orgId);
 
-  const [psResult, profileResult] = await Promise.all([
+  const [psResult, profileResult, psgResult] = await Promise.all([
     api.query(
-      'SELECT Id, Name, Label FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label ASC'
+      'SELECT Id, Name, Label FROM PermissionSet WHERE IsOwnedByProfile = false AND PermissionSetGroupId = null ORDER BY Label ASC'
     ),
-    api.query('SELECT Id, Name FROM Profile ORDER BY Name ASC')
+    api.query('SELECT Id, Name FROM Profile ORDER BY Name ASC'),
+    api.query('SELECT Id, MasterLabel, DeveloperName, MutingPermissionSetId FROM PermissionSetGroup ORDER BY MasterLabel ASC')
+      .catch(() => ({ records: [] })) // PSGs may not exist or may not be enabled in all orgs
   ]);
 
   return {
@@ -151,12 +153,22 @@ async function getPermissionSets(orgId) {
       id: p.Id,
       label: p.Name,
       type: 'profile'
+    })),
+    permissionSetGroups: psgResult.records.map(g => ({
+      id: g.Id,
+      label: g.MasterLabel || g.DeveloperName,
+      mutingPermissionSetId: g.MutingPermissionSetId || null,
+      type: 'permissionsetgroup'
     }))
   };
 }
 
 async function fetchPermissionSetData(orgId, id, itemType = 'permissionset') {
   const { org, api } = await getOrgAndSession(orgId);
+
+  if (itemType === 'permissionsetgroup') {
+    return fetchPermissionSetGroupData(org, api, id);
+  }
 
   let permissionSetId, displayName, displayLabel, profileId = null;
 
@@ -221,6 +233,165 @@ async function fetchPermissionSetData(orgId, id, itemType = 'permissionset') {
     loginHours,
     loginIpRanges
   };
+}
+
+// ─── Permission Set Group (effective permissions) ──────────────────────────────
+
+async function fetchPermissionSetGroupData(org, api, psgId) {
+  // Resolve group label and muting PS
+  const psgInfo = await api.query(
+    `SELECT Id, MasterLabel, DeveloperName, MutingPermissionSetId FROM PermissionSetGroup WHERE Id = '${psgId}'`
+  );
+  if (!psgInfo.records[0]) throw new Error('Permission Set Group not found.');
+  const psg = psgInfo.records[0];
+  const displayLabel = psg.MasterLabel || psg.DeveloperName;
+
+  // Get member permission set IDs
+  const componentResult = await api.queryAll(
+    `SELECT PermissionSetId FROM PermissionSetGroupComponent WHERE PermissionSetGroupId = '${psgId}'`
+  );
+  const memberIds = componentResult.records.map(r => r.PermissionSetId);
+
+  if (memberIds.length === 0) {
+    // Empty group — return zeroed-out structure
+    return {
+      orgId: org.id, orgName: org.name, orgInstanceUrl: org.instanceUrl,
+      itemType: 'permissionsetgroup', profileId: null,
+      permissionSetId: psgId, permissionSetName: psg.DeveloperName, permissionSetLabel: displayLabel,
+      systemPermissions: {}, objectPermissions: {}, fieldPermissions: {},
+      tabSettings: {}, apexClassAccess: [], vfPageAccess: [], customPermissions: [],
+      recordTypeAccess: [], flowAccess: [], appAccess: [], namedCredentialAccess: [],
+      externalDataSourceAccess: [], loginHours: null, loginIpRanges: []
+    };
+  }
+
+  // Fetch permissions for each member PS in parallel
+  const memberDatasets = await Promise.all(
+    memberIds.map(async psId => {
+      const [systemPerms, objectPerms, fieldPerms, tabSettings, setupAccess] = await Promise.all([
+        fetchSystemPermissions(api, psId),
+        fetchObjectPermissions(api, psId),
+        fetchFieldPermissions(api, psId),
+        fetchTabSettings(api, psId),
+        fetchSetupEntityAccess(api, psId)
+      ]);
+      return { systemPerms, objectPerms, fieldPerms, tabSettings, setupAccess };
+    })
+  );
+
+  // Union all member datasets
+  const unified = unionMemberDatasets(memberDatasets);
+
+  // Subtract muting permission set if present
+  if (psg.MutingPermissionSetId) {
+    const [mutingSystem, mutingObject] = await Promise.all([
+      fetchSystemPermissions(api, psg.MutingPermissionSetId),
+      fetchObjectPermissions(api, psg.MutingPermissionSetId)
+    ]);
+    applyMutingPermissions(unified, mutingSystem, mutingObject);
+  }
+
+  return {
+    orgId: org.id, orgName: org.name, orgInstanceUrl: org.instanceUrl,
+    itemType: 'permissionsetgroup', profileId: null,
+    permissionSetId: psgId, permissionSetName: psg.DeveloperName, permissionSetLabel: displayLabel,
+    systemPermissions: unified.systemPerms,
+    objectPermissions: unified.objectPerms,
+    fieldPermissions: unified.fieldPerms,
+    tabSettings: unified.tabSettings,
+    apexClassAccess: unified.setupAccess.apexClasses,
+    vfPageAccess: unified.setupAccess.vfPages,
+    customPermissions: unified.setupAccess.customPermissions,
+    recordTypeAccess: unified.setupAccess.recordTypes,
+    flowAccess: unified.setupAccess.flows,
+    appAccess: unified.setupAccess.apps,
+    namedCredentialAccess: unified.setupAccess.namedCredentials,
+    externalDataSourceAccess: unified.setupAccess.externalDataSources,
+    loginHours: null, loginIpRanges: []
+  };
+}
+
+function unionMemberDatasets(members) {
+  const systemPerms = {};
+  const objectPerms = {};
+  const fieldPerms = {};
+  const tabSettings = {};
+  const TAB_RANK = { 'Visible': 2, 'Available': 1, 'None': 0 };
+  const setupAccess = {
+    apexClasses: new Set(), vfPages: new Set(), customPermissions: new Set(),
+    recordTypes: new Set(), flows: new Set(), apps: new Set(),
+    namedCredentials: new Set(), externalDataSources: new Set()
+  };
+
+  for (const { systemPerms: sp, objectPerms: op, fieldPerms: fp, tabSettings: ts, setupAccess: sa } of members) {
+    // System permissions: OR (true wins)
+    for (const [k, v] of Object.entries(sp)) {
+      systemPerms[k] = systemPerms[k] || v;
+    }
+    // Object permissions: per CRUD flag, OR across members
+    for (const [obj, v] of Object.entries(op)) {
+      if (!objectPerms[obj]) {
+        objectPerms[obj] = { ...v };
+      } else {
+        for (const flag of ['create', 'read', 'edit', 'delete', 'viewAll', 'modifyAll']) {
+          objectPerms[obj][flag] = objectPerms[obj][flag] || v[flag];
+        }
+      }
+    }
+    // Field permissions: OR read/edit flags
+    for (const [field, v] of Object.entries(fp)) {
+      if (!fieldPerms[field]) {
+        fieldPerms[field] = { ...v };
+      } else {
+        fieldPerms[field].read = fieldPerms[field].read || v.read;
+        fieldPerms[field].edit = fieldPerms[field].edit || v.edit;
+      }
+    }
+    // Tab settings: highest visibility wins
+    for (const [tab, vis] of Object.entries(ts)) {
+      const current = TAB_RANK[tabSettings[tab]] ?? -1;
+      if ((TAB_RANK[vis] ?? 0) > current) tabSettings[tab] = vis;
+    }
+    // List-based access: union sets
+    for (const cls of sa.apexClasses)          setupAccess.apexClasses.add(cls);
+    for (const pg of sa.vfPages)               setupAccess.vfPages.add(pg);
+    for (const cp of sa.customPermissions)     setupAccess.customPermissions.add(cp);
+    for (const rt of sa.recordTypes)           setupAccess.recordTypes.add(rt);
+    for (const fl of sa.flows)                 setupAccess.flows.add(fl);
+    for (const ap of sa.apps)                  setupAccess.apps.add(ap);
+    for (const nc of sa.namedCredentials)      setupAccess.namedCredentials.add(nc);
+    for (const ds of sa.externalDataSources)   setupAccess.externalDataSources.add(ds);
+  }
+
+  return {
+    systemPerms,
+    objectPerms,
+    fieldPerms,
+    tabSettings,
+    setupAccess: {
+      apexClasses:          [...setupAccess.apexClasses].sort(),
+      vfPages:              [...setupAccess.vfPages].sort(),
+      customPermissions:    [...setupAccess.customPermissions].sort(),
+      recordTypes:          [...setupAccess.recordTypes].sort(),
+      flows:                [...setupAccess.flows].sort(),
+      apps:                 [...setupAccess.apps].sort(),
+      namedCredentials:     [...setupAccess.namedCredentials].sort(),
+      externalDataSources:  [...setupAccess.externalDataSources].sort()
+    }
+  };
+}
+
+function applyMutingPermissions(unified, mutingSystem, mutingObject) {
+  for (const [k, v] of Object.entries(mutingSystem)) {
+    if (v && k in unified.systemPerms) unified.systemPerms[k] = false;
+  }
+  for (const [obj, v] of Object.entries(mutingObject)) {
+    if (unified.objectPerms[obj]) {
+      for (const flag of ['create', 'read', 'edit', 'delete', 'viewAll', 'modifyAll']) {
+        if (v[flag]) unified.objectPerms[obj][flag] = false;
+      }
+    }
+  }
 }
 
 // ─── System Permissions ────────────────────────────────────────────────────────
@@ -477,17 +648,27 @@ function normalizeToInstanceUrl(url) {
   if (h === 'login.salesforce.com' || h === 'test.salesforce.com' ||
       h === 'salesforce.com' || h === 'trailhead.salesforce.com') return null;
 
-  // Lightning Experience: xxx.lightning.force.com → xxx.my.salesforce.com
-  if (h.endsWith('.lightning.force.com')) {
-    const sub = h.slice(0, h.indexOf('.lightning.force.com'));
+  // Lightning Experience (all variants):
+  //   xxx.lightning.force.com               → production
+  //   xxx.sandbox.lightning.force.com       → sandbox (enhanced domains)
+  //   xxx.develop.lightning.force.com       → scratch/dev orgs
+  //   xxx.scratch.lightning.force.com       → scratch orgs
+  //   xxx.demo.lightning.force.com          → demo orgs
+  //   xxx.cs100.lightning.force.com         → classic sandboxes
+  // Strip everything from ".lightning." onward and map to .my.salesforce.com
+  const lightningIdx = h.indexOf('.lightning.force.com');
+  if (lightningIdx !== -1) {
+    const sub = h.slice(0, lightningIdx);
     return `https://${sub}.my.salesforce.com`;
   }
 
-  // VF/Community pages on force.com — skip (API still goes through my.salesforce.com)
+  // VF/Community pages on force.com — skip (API goes through my.salesforce.com)
   if (h.endsWith('.force.com')) return null;
 
-  // Standard: *.my.salesforce.com, *.sandbox.my.salesforce.com, *.develop.my.salesforce.com, etc.
-  if (h.endsWith('.salesforce.com')) {
+  // Standard Salesforce domains: *.my.salesforce.com, *.salesforce.com (classic),
+  // *.salesforcegovcloud.com (government), *.cloudforce.com (ISV/legacy)
+  if (h.endsWith('.salesforce.com') || h.endsWith('.salesforcegovcloud.com') ||
+      h.endsWith('.cloudforce.com')) {
     return `https://${h}`;
   }
 

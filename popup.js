@@ -118,7 +118,7 @@ async function scanTabs() {
       card.innerHTML = `
         <div class="scan-result-info">
           <div class="scan-result-name">${escHtml(foundOrg.name)}</div>
-          <div class="scan-result-url">${escHtml(foundOrg.instanceUrl)}</div>
+          <div class="scan-result-url">${escHtml(new URL(foundOrg.instanceUrl).hostname)}</div>
         </div>
         <button class="btn-add-small" ${alreadyAdded ? 'disabled' : ''}>
           ${alreadyAdded ? '✓ Added' : 'Add'}
@@ -206,8 +206,8 @@ function renderPSSelectors(loading = false) {
   }
 
   container.innerHTML = orgs.map(org => {
-    const data = permissionSets[org.id] || { profiles: [], permissionSets: [] };
-    const isEmpty = !data.profiles.length && !data.permissionSets.length;
+    const data = permissionSets[org.id] || { profiles: [], permissionSets: [], permissionSetGroups: [] };
+    const isEmpty = !data.profiles.length && !data.permissionSets.length && !data.permissionSetGroups.length;
 
     const profileOpts = data.profiles.map(p =>
       `<option value="profile:${p.id}">${escHtml(p.label)}</option>`
@@ -217,16 +217,21 @@ function renderPSSelectors(loading = false) {
       `<option value="permissionset:${ps.id}">${escHtml(ps.label)}</option>`
     ).join('');
 
+    const psgOpts = (data.permissionSetGroups || []).map(g =>
+      `<option value="permissionsetgroup:${g.id}">${escHtml(g.label)}</option>`
+    ).join('');
+
     const groups = [
-      data.profiles.length    ? `<optgroup label="Profiles">${profileOpts}</optgroup>` : '',
-      data.permissionSets.length ? `<optgroup label="Permission Sets">${psOpts}</optgroup>` : ''
+      data.profiles.length             ? `<optgroup label="Profiles">${profileOpts}</optgroup>` : '',
+      data.permissionSets.length       ? `<optgroup label="Permission Sets">${psOpts}</optgroup>` : '',
+      data.permissionSetGroups?.length ? `<optgroup label="Permission Set Groups">${psgOpts}</optgroup>` : ''
     ].join('');
 
     return `
       <div class="ps-selector">
         <label>${escHtml(org.name)}</label>
         <select data-orgid="${org.id}" ${isEmpty ? 'disabled' : ''}>
-          <option value="">— Select profile or permission set —</option>
+          <option value="">— Select profile, permission set, or group —</option>
           ${groups}
         </select>
       </div>`;

@@ -17,6 +17,10 @@ export class SalesforceAPI {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        const host = new URL(url).hostname;
+        throw new Error(`Session expired for ${host}. Please reload that Salesforce tab and try again.`);
+      }
       let errMsg = response.statusText;
       try {
         const err = await response.json();
