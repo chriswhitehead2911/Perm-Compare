@@ -2,16 +2,26 @@
   "manifest_version": 3,
   "name": "Salesforce Permission Set Comparator",
   "version": "1.1.0",
-  "description": "Compare permission sets across multiple Salesforce orgs",
+  "description": "Side-by-side comparison of Salesforce permission sets, profiles, and permission set groups across multiple orgs.",
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["storage", "cookies", "tabs"],
   "host_permissions": [
     "https://*.salesforce.com/*",
-    "https://*.force.com/*",
+    "https://*.salesforcegovcloud.com/*",
     "https://*.cloudforce.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SF Permission Set Comparator"
+    "default_title": "SF Permission Set Comparator",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
